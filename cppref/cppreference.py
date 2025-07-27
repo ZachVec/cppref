@@ -4,12 +4,12 @@ from lxml import etree, html
 from lxml.html import HtmlElement
 
 from .cppreference_table import (
+    default_table_parser,
     dsctable,
     t_dcl_begin,
     t_dsc_begin,
     t_par_begin,
     t_rev_begin,
-    default_table_parser,
     wikitable,
 )
 from .processor import Processor
