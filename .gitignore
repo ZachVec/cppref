@@ -4,10 +4,12 @@ __pycache__/
 build/
 dist/
 wheels/
+playground.py
 *.egg-info
 *.man
-playground.py
 *.html
+*.log
+*.txt
 
 # Virtual environments
 .venv
