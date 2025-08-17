@@ -4,7 +4,6 @@ __pycache__/
 build/
 dist/
 wheels/
-playground.py
 *.egg-info
 *.man
 *.html
@@ -13,3 +12,8 @@ playground.py
 
 # Virtual environments
 .venv
+
+# Other files
+playground.py
+resources/
+
