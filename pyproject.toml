@@ -1,12 +1,22 @@
 [project]
-name = "cppman-test"
+name = "cppref"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "fire>=0.7.1",
     "httpx>=0.28.1",
     "lxml>=6.0.0",
-    "requests>=2.32.4",
+    "toml>=0.10.2",
+    "tqdm>=4.67.1",
     "types-lxml>=2025.3.30",
 ]
+
+[build-system]
+requires = ["uv_build"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-root = "src"
+module-name = "cppref"
