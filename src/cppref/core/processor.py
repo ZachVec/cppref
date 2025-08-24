@@ -4,8 +4,39 @@ from copy import deepcopy
 from typing import Callable, Dict, Optional, Concatenate
 from lxml.html import HtmlElement
 
-type Matcher = Callable[[HtmlElement], bool]
 type Handler[**P, R] = Callable[Concatenate[HtmlElement, P], R]
+
+
+class Matcher:
+    def __init__(self, fn: Callable[[HtmlElement], bool]) -> None:
+        self._fn = fn
+
+    @property
+    def code(self):
+        return self._fn.__code__.co_code
+
+    @property
+    def argcount(self):
+        return self._fn.__code__.co_argcount
+
+    @property
+    def consts(self):
+        return self._fn.__code__.co_consts
+
+    def __call__(self, element: HtmlElement) -> bool:
+        return self._fn(element)
+
+    def __hash__(self):
+        return hash((self.code, self.argcount))
+
+    def __eq__(self, o):
+        if not isinstance(o, Matcher):
+            return False
+        return (
+            self.code == o.code
+            and self.argcount == o.argcount
+            and self.consts == o.consts
+        )
 
 
 class Processor[**P, R]:
@@ -13,13 +44,13 @@ class Processor[**P, R]:
         self._routes: Dict[Matcher, Handler[P, R]] = {}
         self._default: Optional[Handler[P, R]] = None
 
-    def route(self, matcher: Optional[Matcher] = None):
+    def route(self, matcher: Optional[Callable[[HtmlElement], bool]] = None):
         def decorator(fn: Handler[P, R]) -> Handler[P, R]:
             if matcher is None:
                 assert self._default is None, "Duplicate default processor"
                 self._default = fn
             else:
-                self._routes[matcher] = fn
+                self._routes[Matcher(matcher)] = fn
             return fn
 
         return decorator
