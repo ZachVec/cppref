@@ -15,5 +15,6 @@ wheels/
 
 # Other files
 playground.py
-resources/
-
+scripts/
+testdata/*
+!testdata/index.db  # for test

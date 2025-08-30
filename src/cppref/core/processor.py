@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Callable, Dict, Optional, Concatenate
+from typing import Callable, Concatenate, Dict, Optional
+
 from lxml.html import HtmlElement
 
 type Handler[**P, R] = Callable[Concatenate[HtmlElement, P], R]

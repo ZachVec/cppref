@@ -1,10 +1,57 @@
 import datetime
+
 from lxml import etree, html
 
+from cppref.core.cppreference.description import description
 from cppref.core.processor import Processor
 
-
 processor: Processor[[], str] = Processor()
+
+
+@processor.route(lambda e: e.tag == "h1")
+def header1(elem: html.HtmlElement) -> str:
+    return (
+        ".TS\n"
+        f"expand tab(;);\n"
+        f"- - -\n"
+        f"c s s\n"
+        f"- - -\n"
+        f"c s s.\n"
+        f"T{{\n{elem.text_content().strip()}\nT}}\n"
+        f" ; ;\n"
+        ".TE\n"
+        ".sp"
+    )
+
+
+@processor.route(lambda e: e.tag == "h2")
+def header2(elem: html.HtmlElement) -> str:
+    return (
+        ".TS\n"
+        f"expand tab(;);\n"
+        f"l s s\n"
+        f"- - -\n"
+        f"c s s.\n"
+        f"T{{\n{elem.text_content().strip()}\nT}};\n"
+        f" ; ; \n"
+        ".TE\n"
+        ".sp"
+    )
+
+
+@processor.route(lambda e: e.tag == "h3")
+def section(s: html.HtmlElement) -> str:
+    return f'.sp\n.SH "{s.text_content().strip().upper()}"'
+
+
+@processor.route(lambda e: e.tag in ("h4", "h5"))
+def subsection(elem: html.HtmlElement) -> str:
+    return f'.sp\n.SS "{elem.text_content().strip()}"'
+
+
+@processor.route(lambda e: e.tag == "pre")
+def pre(elem: html.HtmlElement) -> str:
+    return f".in +2n\n.nf\n{elem.text_content().strip()}\n.fi\n.in\n.sp"
 
 
 @processor.route(lambda e: e.tag == "p")
@@ -13,9 +60,29 @@ def paragraph(p: html.HtmlElement) -> str:
     return f"{p.text_content().strip()}\n.sp"
 
 
-@processor.route(lambda e: e.tag == "h3")
-def section_header(s: html.HtmlElement) -> str:
-    return f'.sp\n.SH "{s.text_content().strip().upper()}"'
+@processor.route(lambda e: e.tag == "span")
+def span(elem: html.HtmlElement) -> str:
+    return elem.text_content().strip()
+
+
+@processor.route(lambda e: e.tag == "dl")
+def dl(elem: html.HtmlElement) -> str:
+    return description(elem, processor)
+
+
+@processor.route(lambda e: e.tag == "code")
+def code(elem: html.HtmlElement) -> str:
+    return elem.text_content().strip()
+
+
+@processor.route(lambda e: e.tag == "a")
+def a(elem: html.HtmlElement) -> str:
+    return f"{elem.text_content().strip()}\n.sp"
+
+
+@processor.route(lambda e: e.tag == "br")
+def br(_: html.HtmlElement) -> str:
+    return "\n.sp"
 
 
 @processor.route(lambda e: e.tag == "ol")
@@ -37,9 +104,8 @@ def unordered_list(ul: html.HtmlElement) -> str:
     lines: list[str] = list()
     for item in ul:
         assert item.tag == "li", f"Unknown tag {item.tag} in unordered list"
-        lines.append(r".IP \[bu]")
-        text = "".join(item.text_content()).strip()
-        lines.append(rf"{text}")
+        lines.append('.IP "•" 2n')
+        lines.append(item.text_content().strip())
     lines.append(r".LP")
     return "\n".join(lines)
 
@@ -109,15 +175,18 @@ def process(document: str, p: Processor[[], str] = processor) -> str:
     date = str(datetime.date.today())
     source = "cppreference.com"
     slogan = "C++ Programmer\\'s Manual"
-    texts.append(f'.TH {heading_text} 3 "{date}" "{source}" "{slogan}"')
-    texts.append(f'.SH "NAME"\n{heading_text}')
+    texts.append(f'.TH "{heading_text}" 3 "{date}" "{source}" "{slogan}"')
+    texts.append(f'.SH "{heading_text}"')
+
+    # remove the table of contents which does not make sense
+    for element in body.xpath("//*[@id='toc']"):
+        element.drop_tree()
 
     # remove navigation bars at the top
     for element in body.find_class("t-navbar"):
         element.drop_tree()
 
-    # remove the table of contents which does not make sense
-    for element in body.xpath("//*[@id='toc']"):
+    for element in body.find_class("t-page-template"):
         element.drop_tree()
 
     # remove the invisible edit text
@@ -132,12 +201,29 @@ def process(document: str, p: Processor[[], str] = processor) -> str:
     for element in body.find_class("ambox"):
         element.drop_tree()
 
+    hanging_texts: list[str] = list()
     for element in filter(lambda e: isinstance(e.tag, str), body):
-        texts.append(p.process(element))
+        if element.tail is not None and len(element.tail.strip()) > 0:
+            if len(hanging_texts) > 0:
+                hanging_texts.append(p.process(element))
+                hanging_texts.append(element.tail)
+            else:
+                texts.append(p.process(element))
+                hanging_texts.append(element.tail)
+        else:
+            if len(hanging_texts) > 0:
+                texts.append(f"{''.join(hanging_texts).strip()}\n.sp")
+                hanging_texts = list()
+            texts.append(p.process(element))
+
+    if len(hanging_texts) > 0:
+        texts.append(f"{''.join(hanging_texts).strip()}\n.sp")
+        hanging_texts = list()
 
     unicode_mappings: list[tuple[str, str]] = [
         ("\xa0", " "),  # replace(&nbsp) with space
         ("\u200b", ""),  # remove zerowidthspace
+        ("\ufeff", ""),  # remove invisible zerowidthspace
     ]
     ret = "\n".join(texts)
     for char, repl in unicode_mappings:

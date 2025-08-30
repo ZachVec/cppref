@@ -1,10 +1,11 @@
-from typing import Literal, NamedTuple, Union
+import re
+from typing import Literal, NamedTuple, Required, TypedDict, Union
 
 type Source = Literal["cppreference", "cplusplus"]
 
 type Format = Literal["html", "man"]
 
-type ConfKey = Literal["db_path", "source"]
+type ConfKey = Literal["source", "path"]
 
 type ConfVal = Union[str, Source]
 
@@ -20,3 +21,14 @@ class Record(NamedTuple):
     @property
     def normalized_name(self):
         return self.title.replace("/", "_")
+
+    @staticmethod
+    def parse_id(string: str) -> int:
+        result = re.search(r"^\s*(\d+).*", string)
+        assert result is not None, "Nothing matched"
+        return int(result.group(1))
+
+
+class Configuration(TypedDict):
+    source: Required[Source]
+    folder: Required[str]

@@ -1,129 +1,82 @@
 #!/usr/bin/env python3
 
 import asyncio
-import os
 import sys
-from enum import Enum
 from pathlib import Path
-from types import NoneType
-from typing import Callable, Optional, overload
+from typing import Optional
 
 from tqdm import tqdm
 from tqdm.asyncio import tqdm_asyncio as atqdm
 
-from cppref import Configuration, Format, Record, Source, Utils
-
-DATA_HOME = Path(os.getenv("XDG_DATA_HOME") or "~/.local/share").joinpath("cppref")
-DATA_DIR = str(DATA_HOME)
-
-
-class ErrorCode(Enum):
-    DATABASE_NOT_EXIST = "index.db not exist, download it from github."
-    PKEY_NOT_EXIST = "entry not found with provided information"
+from cppref import Format, Record, Source
+from cppref.conf import ConfContext
+from cppref.fzf import FzfContext
+from cppref.utils import Utils
 
 
 class CppRef:
-    def __init__(self) -> None:
-        state = Path(os.getenv("XDG_STATE_HOME") or "~/.local/state")
-        state = state.joinpath("cppref", "cppref.toml").expanduser().absolute()
-        state.parent.mkdir(parents=True, exist_ok=True)
-        self._conf_path = state
-
-    @staticmethod
-    def _non_exist_filter(dir: Path, ext: str):
-        def filter_fn(record: Record) -> bool:
-            return not dir.joinpath(f"{record.id}.{ext}").exists()
-
-        return filter_fn
-
-    @staticmethod
-    def _exist_filter(dir: Path, ext: str):
-        def filter_fn(record: Record) -> bool:
-            return dir.joinpath(f"{record.id}.{ext}").exists()
-
-        return filter_fn
-
-    @overload
-    def _query(self, conf: Configuration, pkey: int) -> Record | ErrorCode: ...
-
-    @overload
-    def _query(
-        self, conf: Configuration, pkey: NoneType = None
-    ) -> list[Record] | ErrorCode: ...
-
-    def _query(
-        self, conf: Configuration, pkey: Optional[int] = None
-    ) -> list[Record] | Record | ErrorCode:
-        db = Path(conf["db_path"])
-        if not db.exists() or not db.is_file():
-            return ErrorCode.DATABASE_NOT_EXIST
-        results = list(Utils.query(conf["source"], pkey=pkey, path=db))
-        if pkey is None:
-            return results
-        if len(results) == 0:
-            return ErrorCode.PKEY_NOT_EXIST
-        return results[0]
-
     def switch(self, source: Source):
-        with Configuration(self._conf_path) as conf:
-            conf["source"] = source
+        with ConfContext() as conf:
+            conf.source = source
 
     def list(self):
-        with Configuration(self._conf_path) as conf:
-            records = self._query(conf)
-            if isinstance(records, ErrorCode):
-                return print(records.value, file=sys.stderr)
-            return "\n".join(map(str, records))
+        conf = ConfContext()
+        try:
+            records = Utils.query(conf.source, conf.dbfile)
+            print("\n".join(map(str, records)))
+        except AssertionError as e:
+            print(str(e), file=sys.stderr)
+        except BrokenPipeError:
+            pass  # the process piped to has been closed.
 
-    def man(self, pkey: int, *, dir: str = DATA_DIR, timeout: float = 10):
-        with Configuration(self._conf_path) as conf:
-            root = Path(dir).expanduser().joinpath(conf["source"])
-            manp = root.joinpath("man")
-            html = root.joinpath("html")
+    def man(self, *, dir: Optional[str] = None, timeout: float = 10):
+        with ConfContext() as conf:
+            source = conf.source
+            dbfile = conf.dbfile
+            folder = Path(dir) if isinstance(dir, str) else conf.folder
 
-            filename = manp.joinpath(f"{pkey}.man")
-            filename.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            records = Utils.query(source, dbfile)
+        except AssertionError as e:
+            return print(str(e), file=sys.stderr)
 
-            if not filename.exists():
-                htmlname = html.joinpath(f"{pkey}.html")
-                if htmlname.exists():
-                    with open(htmlname, "r", encoding="utf-8") as file:
-                        webpage = file.read()
-                else:
-                    record = self._query(conf, pkey)
-                    if isinstance(record, ErrorCode):
-                        return print(record.value, file=sys.stderr)
-                    webpage = Utils.fetch(record, timeout)
+        with FzfContext("+m") as fzf:
+            assert fzf.add_option(*records)
+            selected = fzf.get_selection()
+            if len(selected) == 0:
+                return print("Canceled.")
+            record = records[Record.parse_id(selected[0]) - 1]
 
-                content = Utils.html_handler(conf["source"])(webpage)
-                with open(filename, "w", encoding="utf-8") as file:
-                    file.write(content)
+        root = folder.joinpath(source).expanduser().absolute()
+        man3 = root.joinpath("man3")
+        html = root.joinpath("html")
+        filename = man3.joinpath(f"{record.id}.man")
+        filename.parent.mkdir(parents=True, exist_ok=True)
+        if not filename.exists():
+            htmlname = html.joinpath(f"{record.id}.html")
+            if htmlname.exists():
+                webpage = Utils.read_file(htmlname)
+            else:
+                webpage = Utils.fetch(record, timeout)
 
-    def cache(
-        self,
-        *,
-        dir: str = DATA_DIR,
-        format: Format = "man",
-        force: bool = False,
-        timeout: float = 10,
-        limit: int = 30,
-    ):
-        """Fetch all documents and save as specified format.
+            Utils.write_file(filename, Utils.html_handler(source)(webpage))
 
-        Args:
-            dir: documents are stored under `dir/source/format/`
-            format: "man" for manual or "html" for html documents
-            force: overwrite the file if exists.
-        """
+    def cache(self, *, dir: Optional[str] = None, format: Format = "man", force: bool = False, timeout: float = 10, limit: int = 30):  # fmt: off
+        with ConfContext() as conf:
+            source = conf.source
+            dbfile = conf.dbfile
+            folder = Path(dir) if isinstance(dir, str) else conf.folder
+            source_path = folder.joinpath(source).expanduser().absolute()
 
         ext: str = format
+        handler = Utils.html_handler(source)
+        root = source_path.joinpath(format)
+        root.mkdir(parents=True, exist_ok=True)
 
-        async def _cache(
-            root: Path, records: list[Record], handler: Callable[[str], str]
-        ):
-            index = -1
+        async def _cache(root: Path, records: list[Record]):
+            index, total, stdout = -1, len(records), sys.stdout
             resps = Utils.afetch(*records, timeout=timeout, limit=limit)
-            async for resp in atqdm(resps, desc="Processing", total=len(records), file=sys.stdout):
+            async for resp in atqdm(resps, desc="Processing", total=total, file=stdout):
                 index += 1
                 resp = await resp
                 if isinstance(resp, BaseException):
@@ -135,48 +88,63 @@ class CppRef:
                     print(str(e), file=sys.stderr)
                 else:
                     filename = root.joinpath(f"{records[index].id}.{ext}")
+                    Utils.write_file(filename, resp)
                     with open(filename, "w", encoding="utf-8") as file:
                         file.write(resp)
 
-        with Configuration(self._conf_path) as conf:
-            records = self._query(conf)
-            if isinstance(records, ErrorCode):
-                return print(records.value, file=sys.stderr)
+        try:
+            records = Utils.query(source, dbfile)
+        except AssertionError as e:
+            return print(str(e), file=sys.stderr)
 
-            root = Path(dir).expanduser().joinpath(conf["source"]).joinpath(format)
-            if not force:
-                records = list(filter(CppRef._non_exist_filter(root, ext), records))
+        if not force:
+            records = filter(lambda r: not root.joinpath(f"{r.id}.{ext}").exists(), records)  # fmt: off
+        asyncio.run(_cache(root, list(records)))
 
-            root.mkdir(parents=True, exist_ok=True)
-            asyncio.run(_cache(root, records, Utils.html_handler(conf["source"])))
+    def parse(self, dir: Optional[str] = None, force: bool = False, interact: bool = False):  # fmt: off
+        with ConfContext() as conf:
+            source = conf.source
+            dbfile = conf.dbfile
+            folder = Path(dir) if isinstance(dir, str) else conf.folder
+        root = folder.joinpath(source).expanduser().absolute()
+        man3 = root.joinpath("man3")
+        html = root.joinpath("html")
+        if not html.exists():
+            return f"{html} is not eixst, run cache command first."
+        if not html.is_dir():
+            return f"{html} is not a directory"
 
-    def parse(self, dir: str = DATA_DIR, force: bool = False):
-        with Configuration(self._conf_path) as conf:
-            root = Path(dir).expanduser().joinpath(conf["source"]).absolute()
-            html = root.joinpath("html")
-            manp = root.joinpath("man")
-            if not html.exists():
-                return f"{html} is not eixst, run cache command first."
-            if not html.is_dir():
-                return f"{html} is not a directory"
+        try:
+            records = Utils.query(source, dbfile)
+        except AssertionError as e:
+            return print(str(e), file=sys.stderr)
 
-            records = self._query(conf)
-            if isinstance(records, ErrorCode):
-                return print(records.value, file=sys.stderr)
-            records = list(filter(CppRef._exist_filter(html, "html"), records))
-            if not force:
-                records = list(filter(CppRef._non_exist_filter(manp, "man"), records))
+        records = filter(lambda r: html.joinpath(f"{r.id}.html").exists(), records)
+        if not force:
+            records = filter(lambda r: not man3.joinpath(f"{r.id}.man").exists(), records)  # fmt: off
 
-            process = Utils.html_handler(conf["source"])
-            manp.mkdir(parents=True, exist_ok=True)
-            for r in tqdm(records, desc="Processing", total=len(records), file=sys.stdout):
-                document = Utils.read_file(html.joinpath(f"{r.id}.html"))
-                try:
-                    document = process(document)
-                except AssertionError as e:
-                    print(f"{e}, url={r.url}", file=sys.stderr)
-                else:
-                    Utils.write_file(manp.joinpath(f"{r.id}.man"), document)
+        records = list(records)
+        if len(records) == 0:
+            return print("Nothing to parse.")
+
+        if interact:
+            with FzfContext("-m") as fzf:
+                assert fzf.add_option(*records)
+                selected = fzf.get_selection()
+                if len(selected) == 0:
+                    return print("Canceled.")
+                records = [records[Record.parse_id(s) - 1] for s in selected]
+
+        man3.mkdir(parents=True, exist_ok=True)
+        total, process = len(records), Utils.html_handler(source)
+        for r in tqdm(records, desc="Processing", total=total, file=sys.stdout):
+            document = Utils.read_file(html.joinpath(f"{r.id}.html"))
+            try:
+                document = process(document)
+            except AssertionError as e:
+                print(f"{e}, record={r}", file=sys.stderr)
+            else:
+                Utils.write_file(man3.joinpath(f"{r.id}.man"), document)
 
 
 if __name__ == "__main__":
