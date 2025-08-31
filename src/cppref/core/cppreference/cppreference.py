@@ -1,8 +1,11 @@
 import datetime
+import re
 
 from lxml import etree, html
 
 from cppref.core.cppreference.description import description
+from cppref.core.cppreference.div import div_block
+from cppref.core.cppreference.utils import collect
 from cppref.core.processor import Processor
 
 processor: Processor[[], str] = Processor()
@@ -11,6 +14,7 @@ processor: Processor[[], str] = Processor()
 @processor.route(lambda e: e.tag == "h1")
 def header1(elem: html.HtmlElement) -> str:
     return (
+        "\n.sp\n"
         ".TS\n"
         f"expand tab(;);\n"
         f"- - -\n"
@@ -20,13 +24,13 @@ def header1(elem: html.HtmlElement) -> str:
         f"T{{\n{elem.text_content().strip()}\nT}}\n"
         f" ; ;\n"
         ".TE\n"
-        ".sp"
     )
 
 
 @processor.route(lambda e: e.tag == "h2")
 def header2(elem: html.HtmlElement) -> str:
     return (
+        "\n.sp\n"
         ".TS\n"
         f"expand tab(;);\n"
         f"l s s\n"
@@ -35,29 +39,27 @@ def header2(elem: html.HtmlElement) -> str:
         f"T{{\n{elem.text_content().strip()}\nT}};\n"
         f" ; ; \n"
         ".TE\n"
-        ".sp"
     )
 
 
 @processor.route(lambda e: e.tag == "h3")
 def section(s: html.HtmlElement) -> str:
-    return f'.sp\n.SH "{s.text_content().strip().upper()}"'
+    return f'\n.sp\n.SH "{s.text_content().strip().upper()}"\n'
 
 
 @processor.route(lambda e: e.tag in ("h4", "h5"))
 def subsection(elem: html.HtmlElement) -> str:
-    return f'.sp\n.SS "{elem.text_content().strip()}"'
+    return f'\n.sp\n.SS "{elem.text_content().strip()}"\n'
 
 
 @processor.route(lambda e: e.tag == "pre")
 def pre(elem: html.HtmlElement) -> str:
-    return f".in +2n\n.nf\n{elem.text_content().strip()}\n.fi\n.in\n.sp"
+    return f"\n.in +2n\n.nf\n{elem.text_content().strip()}\n.fi\n.in\n"
 
 
 @processor.route(lambda e: e.tag == "p")
 def paragraph(p: html.HtmlElement) -> str:
-    etree.strip_tags(p, "*")
-    return f"{p.text_content().strip()}\n.sp"
+    return f"\n{p.text_content().replace('\n', '\n.br\n')}\n"
 
 
 @processor.route(lambda e: e.tag == "span")
@@ -77,26 +79,25 @@ def code(elem: html.HtmlElement) -> str:
 
 @processor.route(lambda e: e.tag == "a")
 def a(elem: html.HtmlElement) -> str:
-    return f"{elem.text_content().strip()}\n.sp"
+    return elem.text_content().strip()
 
 
 @processor.route(lambda e: e.tag == "br")
 def br(_: html.HtmlElement) -> str:
-    return "\n.sp"
+    return "\n.br\n"
 
 
 @processor.route(lambda e: e.tag == "ol")
 def ordered_list(ol: html.HtmlElement) -> str:
     lines: list[str] = list()
     lines.append(r".nr step 0 1")
-    lines.append(r".nr PI 3n")
     for item in ol:
         assert item.tag == "li", f"Unknown tag {item.tag} in ordred list"
-        lines.append(r".IP \n+[step]")
+        lines.append(r".IP \n+[step] 2")
         text = "".join(item.text_content()).strip()
         lines.append(rf"{text}")
     lines.append(r".LP")
-    return "\n".join(lines)
+    return f"\n{'\n'.join(lines)}\n"
 
 
 @processor.route(lambda e: e.tag == "ul")
@@ -107,22 +108,26 @@ def unordered_list(ul: html.HtmlElement) -> str:
         lines.append('.IP "•" 2n')
         lines.append(item.text_content().strip())
     lines.append(r".LP")
-    return "\n".join(lines)
+    return f"\n{'\n'.join(lines)}\n"
 
 
 @processor.route(lambda e: e.tag == "div")
-def div(elem: html.HtmlElement) -> str:
-    # if "t-example" in tree.get("class", ""):
-    #     elem = tree.xpath("div[@class='t-example-live-link']")[0]
-    #     tree.remove(elem)
-    #
-    #     return f".nf\n{tree.text_content().replace('\\', r'\e')}"
-    #
-    # etree.strip_tags(tree, "*")
-    # if "t-li1" in tree.get("class", ""):
-    #     return f"{tree.text_content().strip()}\n.sp"
-    # return tree.text_content().strip()
-    return ""
+def div(element: html.HtmlElement) -> str:
+    if "t-member" in element.get("class", ""):
+        for e in element.iter("h2"):
+            e.drop_tree()
+        return collect(element, processor)
+    if element.get("class") is None:
+        return collect(element, processor)
+
+    if re.search(r"t-ref-std-c\+\+\d\d", element.get("class", "")) is not None:
+        return collect(element, processor)
+
+    if "mw-collapsed" in element.get("class", ""):
+        etree.strip_tags(element, "div")
+        return collect(element, processor)
+
+    return div_block(element)
 
 
 @processor.route(lambda e: e.tag == "table")
@@ -182,6 +187,10 @@ def process(document: str, p: Processor[[], str] = processor) -> str:
     for element in body.xpath("//*[@id='toc']"):
         element.drop_tree()
 
+    # remove all the comments
+    for element in body.xpath("//comment()"):
+        element.drop_tree()
+
     # remove navigation bars at the top
     for element in body.find_class("t-navbar"):
         element.drop_tree()
@@ -201,31 +210,26 @@ def process(document: str, p: Processor[[], str] = processor) -> str:
     for element in body.find_class("ambox"):
         element.drop_tree()
 
-    hanging_texts: list[str] = list()
-    for element in filter(lambda e: isinstance(e.tag, str), body):
-        if element.tail is not None and len(element.tail.strip()) > 0:
-            if len(hanging_texts) > 0:
-                hanging_texts.append(p.process(element))
-                hanging_texts.append(element.tail)
-            else:
-                texts.append(p.process(element))
-                hanging_texts.append(element.tail)
-        else:
-            if len(hanging_texts) > 0:
-                texts.append(f"{''.join(hanging_texts).strip()}\n.sp")
-                hanging_texts = list()
-            texts.append(p.process(element))
+    # remove images
+    for element in body.find_class("t-image"):
+        element.drop_tree()
 
-    if len(hanging_texts) > 0:
-        texts.append(f"{''.join(hanging_texts).strip()}\n.sp")
-        hanging_texts = list()
+    # remove images
+    for element in body.find_class("t-inheritance-diagram"):
+        element.drop_tree()
 
-    unicode_mappings: list[tuple[str, str]] = [
-        ("\xa0", " "),  # replace(&nbsp) with space
-        ("\u200b", ""),  # remove zerowidthspace
-        ("\ufeff", ""),  # remove invisible zerowidthspace
-    ]
-    ret = "\n".join(texts)
-    for char, repl in unicode_mappings:
-        ret = ret.replace(char, repl)
-    return ret
+    for element in body.find_class("t-plot"):
+        element.drop_tree()
+
+    for element in body.find_class("t-template-editlink"):
+        element.drop_tree()
+
+    for element in body.cssselect("[style]"):
+        if "display:none" in element.get("style", ""):
+            element.drop_tree()
+
+    texts.append(collect(body, p))
+
+    text = "\n.sp\n".join(texts)
+
+    return text.replace("\xa0", " ").replace("\u200b", "").replace("\ufeff", "")
