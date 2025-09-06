@@ -1,14 +1,13 @@
 import os
-import unittest
 from unittest.mock import patch
 
 from cppref.conf import ConfContext
-from tests.helpers import get_root
+from tests.helpers import TestBase
 
 
-class ConfigurationTest(unittest.TestCase):
+class ConfigurationTest(TestBase):
     def setUp(self) -> None:
-        root = get_root().joinpath("testdata")
+        root = self.get_root().joinpath("testdata")
         root.mkdir(parents=True, exist_ok=True)
         state = root.joinpath("state")
         cache = root.joinpath("share")
@@ -17,7 +16,7 @@ class ConfigurationTest(unittest.TestCase):
         self._environs = {"XDG_STATE_HOME": str(state), "XDG_DATA_HOME": str(cache)}
 
     def test_generation(self):
-        root = get_root().expanduser().absolute().joinpath("testdata")
+        root = self.get_root().expanduser().absolute().joinpath("testdata")
         share = root.joinpath("share", "cppref")
         with patch.dict(os.environ, self._environs):
             with ConfContext() as conf:
