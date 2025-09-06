@@ -1,3 +1,4 @@
+import itertools
 import unittest
 from typing import Callable
 
@@ -89,25 +90,27 @@ class CppReferenceAssumption(TestBase):
         for record, document in map(lambda r: (r, toElement(r)), records):
             with self.subTest(f"Record={record}, url={record.url}"):
                 for table in document.iterdescendants("table"):
-                    self.table_assumptions(table)
+                    self.assume(table)
 
-    def table_assumptions(self, table: HtmlElement):
+    def assume(self, table: HtmlElement):
         strip_tags(table, "tbody")
         clazz = table.get("class", "")
         if len(table) == 0 or clazz == "" or len(table.text_content().strip()) == 0:
             return
-        # self.assertNotEqual(clazz, "", table.text_content())
-        assumptions = list[Callable[[HtmlElement], None]]()
         if "t-dcl-begin" in clazz:
-            assumptions.append(self.assume_columns_of(3))
+            self._assume_columns_of(table, 3)
+            self._assume_none_nested_table(table, 1, 2)
         elif "t-par-begin" in clazz:
-            assumptions.append(self.assume_columns_of(3))
+            self._assume_columns_of(table, 3)
+            self._assume_each_row(table, lambda row: len(row) < 2 or row[1].text_content().strip() == "-")  # fmt: off
+            self._assume_none_nested_table(table, 0, 1)
         elif "t-dsc-begin" in clazz:
-            assumptions.append(self.assume_columns_of(2))
+            self._assume_columns_of(table, 2)
+            self._assume_none_nested_table(table, 0)
         elif "t-rev-begin" in clazz:
-            assumptions.append(self.assume_columns_of(2))
+            self._assume_columns_of(table, 2)
+            self._assume_none_nested_table(table, 1)
         elif "t-sdsc-begin" in clazz:
-            assumptions.append(self.assume_columns_of(3))
             for e in table.find_class("t-sdsc-sep"):
                 parent = e.getparent()
                 if parent is None:
@@ -115,8 +118,10 @@ class CppReferenceAssumption(TestBase):
                 else:
                     self.assertEqual(len(parent), 1, "Expected t-sdsc-sep has no siblings")  # fmt: off
                     parent.drop_tree()
+            self._assume_columns_of(table, 3)
+            self._assume_none_nested_table(table, 1, 2)
         elif "eq-fun-cpp-table" in clazz:
-            assumptions.append(self.assume_columns_of(1))
+            self._assume_columns_of(table, 1)
         elif "dsctable" in clazz:
             pass
         elif "wikitable" in clazz:
@@ -125,13 +130,18 @@ class CppReferenceAssumption(TestBase):
             pass
         else:
             self.assertTrue(False, f"Unexpected table class: {clazz}")
-        for assumption in assumptions:
-            assumption(table)
 
-    def assume_columns_of(self, num: int):
-        def wrapper(table: HtmlElement):
-            self.assertGreater(len(table), 0)
-            ncols = sum([int(col.get("colspan", "1")) for col in table[0]])
-            self.assertEqual(ncols, num, f"{table.get('class', '')} expects {num} columns, got {ncols}.")  # fmt: off
+    def _assume_columns_of(self, table: HtmlElement, num: int):
+        self.assertGreater(len(table), 0)
+        ncols = sum([int(col.get("colspan", "1")) for col in table[0]])
+        self.assertEqual(ncols, num, f"{table.get('class', '')} expects {num} columns, got {ncols}.")  # fmt: off
 
-        return wrapper
+    def _assume_each_row(self, table: HtmlElement, fn: Callable[[HtmlElement], bool]):
+        self.assertTrue(all(map(fn, table)), table.text_content().strip())
+
+    def _assume_none_nested_table(self, table: HtmlElement, *columns: int):
+        for row in table:
+            if any([col.get("colspan") is not None for col in row]):
+                continue
+            for e in itertools.chain(row[i] for i in columns):
+                self.assertNotEqual(e.tag, "table")
