@@ -19,7 +19,7 @@ class Utils:
         with sqlite3.connect(path) as conn:
             cursor = conn.cursor()
             ret = list(map(lambda t: Record(*t), cursor.execute(query).fetchall()))
-            conn.close()
+        conn.close()
         return ret
 
     @staticmethod
