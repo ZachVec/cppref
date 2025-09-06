@@ -5,15 +5,10 @@ import sqlite3
 from pathlib import Path
 from typing import Callable, Sequence
 
-from httpx import AsyncClient, Client, Headers, Limits
+from playwright.async_api import async_playwright
+from playwright.sync_api import sync_playwright
 
 from cppref.typing_ import Record, Source
-
-HDRS = Headers()
-HDRS.setdefault(
-    "User-Agent",
-    "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/111.0",
-)
 
 
 class Utils:
@@ -23,16 +18,22 @@ class Utils:
         query = f'SELECT {",".join(Record._fields)} FROM "{source}.com"'
         with sqlite3.connect(path) as conn:
             cursor = conn.cursor()
-            return list(map(lambda t: Record(*t), cursor.execute(query).fetchall()))
+            ret = list(map(lambda t: Record(*t), cursor.execute(query).fetchall()))
+            conn.close()
+        return ret
 
     @staticmethod
     def fetch(record: Record, timeout: float) -> str:
-        with Client(headers=HDRS, timeout=timeout, follow_redirects=True) as client:
-            resp = client.get(record.url)
-            assert resp.is_success, (
-                f"Failed to fetch content from {record.url}, status_code={resp.status_code}, text={resp.text}"
-            )
-            return resp.content.decode()
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            resp = page.goto(record.url, timeout=timeout, wait_until="networkidle")
+            assert resp is not None, f"Timeout: {record}"
+            assert resp.ok, f"Request failed: status={resp.status_text}, {record}"
+            content = page.content()
+            page.close()
+            browser.close()
+            return content
 
     @staticmethod
     async def afetch(*records: Record, timeout: float, limit: int):
@@ -41,19 +42,26 @@ class Utils:
             for i in range(0, length, limit):
                 yield data[i : i + limit]
 
-        limits = Limits(max_connections=limit, max_keepalive_connections=1)
-        async with AsyncClient(headers=HDRS, timeout=timeout, limits=limits, follow_redirects=True) as c:  # fmt: off
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            pages = [await browser.new_page() for _ in range(limit)]
 
-            async def fetch(record: Record) -> str:
-                r = await c.get(record.url)
-                assert r.is_success, f"Failed to fetch {record.title} from {record.url}"
-                return r.content.decode()
+            async def _fetch(index: int, record: Record) -> str:
+                resp = await pages[index].goto(record.url, timeout=timeout, wait_until="networkidle")  # fmt: off
+                assert resp is not None, f"Timeout: {record}"
+                assert resp.ok, f"Request failed: status={resp.status_text}, {record}"
+                return await pages[index].content()
 
             for batch in batch_iter(records):
-                tasks = map(fetch, batch)
-                pages = await asyncio.gather(*tasks, return_exceptions=True)
-                for page in pages:
-                    yield page
+                tasks = map(lambda t: _fetch(t[0], t[1]), enumerate(batch))
+                htmls = await asyncio.gather(*tasks, return_exceptions=True)
+                for html in htmls:
+                    yield html
+
+            for page in pages:
+                await page.close()
+
+            await browser.close()
 
     @staticmethod
     def html_handler(source: Source) -> Callable[[str], str]:

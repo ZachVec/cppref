@@ -55,5 +55,5 @@ def _(element: HtmlElement) -> str:
     )
 
 
-def div_block(element: HtmlElement) -> str:
+def div(element: HtmlElement) -> str:
     return processor.process(element)

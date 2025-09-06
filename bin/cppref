@@ -30,7 +30,7 @@ class CppRef:
         except BrokenPipeError:
             pass  # the process piped to has been closed.
 
-    def man(self, *, dir: Optional[str] = None, timeout: float = 10):
+    def man(self, *, dir: Optional[str] = None, timeout: float = 10000):
         with ConfContext() as conf:
             source = conf.source
             dbfile = conf.dbfile
@@ -65,7 +65,7 @@ class CppRef:
         process = Popen(f"man {filename}", shell=True)
         process.wait()
 
-    def cache(self, *, dir: Optional[str] = None, format: Format = "man", force: bool = False, timeout: float = 10, limit: int = 30):  # fmt: off
+    def cache(self, *, dir: Optional[str] = None, format: Format = "man", force: bool = False, timeout: float = 10000, limit: int = 30):  # fmt: off
         with ConfContext() as conf:
             source = conf.source
             dbfile = conf.dbfile
@@ -73,36 +73,45 @@ class CppRef:
             source_path = folder.joinpath(source).expanduser().absolute()
 
         ext: str = format
-        handler = Utils.html_handler(source)
+        if format == "man":
+            _handler = Utils.html_handler(source)
+
+            def handler(resp: str) -> str:
+                return _handler(resp)
+        else:
+
+            def handler(resp: str) -> str:
+                return resp
+
         root = source_path.joinpath(format)
         root.mkdir(parents=True, exist_ok=True)
 
         async def _cache(root: Path, records: list[Record]):
-            index, total, stdout = -1, len(records), sys.stdout
-            resps = Utils.afetch(*records, timeout=timeout, limit=limit)
-            async for resp in atqdm(resps, desc="Processing", total=total, file=stdout):
+            index, total = -1, len(records)
+            async for resp in Utils.afetch(*records, timeout=timeout, limit=limit):
                 index += 1
-                resp = await resp
                 if isinstance(resp, BaseException):
-                    print(resp, file=sys.stderr)
+                    print(f"Error={type(resp).__name__}({str(resp)}), record={records[index]}", file=sys.stderr)  # fmt: off
                     continue
                 try:
                     resp = handler(resp)
                 except AssertionError as e:
                     print(str(e), file=sys.stderr)
+                    continue
                 else:
-                    filename = root.joinpath(f"{records[index].id}.{ext}")
-                    Utils.write_file(filename, resp)
-                    with open(filename, "w", encoding="utf-8") as file:
-                        file.write(resp)
+                    Utils.write_file(root.joinpath(f"{records[index].id}.{ext}"), resp)
+                    print(f"{index}/{total}", file=sys.stdout)
 
         try:
             records = Utils.query(source, dbfile)
         except AssertionError as e:
-            return print(str(e), file=sys.stderr)
+            return print(f"Unexpected Error: {e}", file=sys.stderr)
 
         if not force:
             records = filter(lambda r: not root.joinpath(f"{r.id}.{ext}").exists(), records)  # fmt: off
+        records = list(records)
+        if len(records) == 0:
+            return print("Nothing to fetch.", file=sys.stderr)
         asyncio.run(_cache(root, list(records)))
 
     def parse(self, dir: Optional[str] = None, force: bool = False, interact: bool = False):  # fmt: off
@@ -147,6 +156,8 @@ class CppRef:
                 document = process(document)
             except AssertionError as e:
                 print(f"{e}, record={r}", file=sys.stderr)
+            except Exception as e:
+                print(f"record={r}, Unexpected error {e}", file=sys.stderr)
             else:
                 Utils.write_file(man3.joinpath(f"{r.id}.man"), document)
 

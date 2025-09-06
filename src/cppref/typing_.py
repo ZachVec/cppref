@@ -11,7 +11,7 @@ type ConfVal = Union[str, Source]
 
 
 class Record(NamedTuple):
-    id: str
+    id: int
     title: str
     url: str
 

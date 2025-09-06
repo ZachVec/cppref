@@ -1,3 +1,5 @@
+from typing import Callable
+from lxml.etree import strip_tags
 from lxml.html import HtmlElement
 
 from cppref.core.processor import Processor
@@ -14,3 +16,18 @@ def collect(elem: HtmlElement, processor: Processor[[], str]) -> str:
             texts.append(element.tail)
 
     return "".join(texts)
+
+
+def nested_table_processor(
+    table: HtmlElement,
+    formatter: Callable[[HtmlElement], str],
+    texter: Callable[[HtmlElement], list[str]],
+) -> tuple[list[str], list[list[str]]]:
+    assert table.tag == "table", f"Expect table, but got {table.tag}"
+    strip_tags(table, "tbody")
+    formats, texts = list[str](), list[list[str]]()
+    for row in table:
+        assert row.tag == "tr", f"Expected tr in nested t_rev_begin, got {row.tag}"
+        formats.append(formatter(row))
+        texts.append(texter(row))
+    return formats, texts

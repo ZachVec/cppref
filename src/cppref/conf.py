@@ -54,4 +54,4 @@ class ConfContext:
 
     @property
     def dbfile(self) -> Path:
-        return Path(self._conf["folder"]).joinpath("index.db")
+        return self.folder.joinpath("index.db")

@@ -3,16 +3,17 @@ import re
 
 from lxml import etree, html
 
-from cppref.core.cppreference.description import description
-from cppref.core.cppreference.div import div_block
+from cppref.core.cppreference.description import dl
+from cppref.core.cppreference.div import div
 from cppref.core.cppreference.utils import collect
+from cppref.core.cppreference.table import table
 from cppref.core.processor import Processor
 
 processor: Processor[[], str] = Processor()
 
 
 @processor.route(lambda e: e.tag == "h1")
-def header1(elem: html.HtmlElement) -> str:
+def _(elem: html.HtmlElement) -> str:
     return (
         "\n.sp\n"
         ".TS\n"
@@ -28,7 +29,7 @@ def header1(elem: html.HtmlElement) -> str:
 
 
 @processor.route(lambda e: e.tag == "h2")
-def header2(elem: html.HtmlElement) -> str:
+def _(elem: html.HtmlElement) -> str:
     return (
         "\n.sp\n"
         ".TS\n"
@@ -43,52 +44,52 @@ def header2(elem: html.HtmlElement) -> str:
 
 
 @processor.route(lambda e: e.tag == "h3")
-def section(s: html.HtmlElement) -> str:
+def _(s: html.HtmlElement) -> str:
     return f'\n.sp\n.SH "{s.text_content().strip().upper()}"\n'
 
 
 @processor.route(lambda e: e.tag in ("h4", "h5"))
-def subsection(elem: html.HtmlElement) -> str:
+def _(elem: html.HtmlElement) -> str:
     return f'\n.sp\n.SS "{elem.text_content().strip()}"\n'
 
 
 @processor.route(lambda e: e.tag == "pre")
-def pre(elem: html.HtmlElement) -> str:
+def _(elem: html.HtmlElement) -> str:
     return f"\n.in +2n\n.nf\n{elem.text_content().strip()}\n.fi\n.in\n"
 
 
 @processor.route(lambda e: e.tag == "p")
-def paragraph(p: html.HtmlElement) -> str:
+def _(p: html.HtmlElement) -> str:
     return f"\n{p.text_content().replace('\n', '\n.br\n')}\n"
 
 
 @processor.route(lambda e: e.tag == "span")
-def span(elem: html.HtmlElement) -> str:
+def _(elem: html.HtmlElement) -> str:
     return elem.text_content().strip()
 
 
 @processor.route(lambda e: e.tag == "dl")
-def dl(elem: html.HtmlElement) -> str:
-    return description(elem, processor)
+def _(elem: html.HtmlElement) -> str:
+    return dl(elem, processor)
 
 
 @processor.route(lambda e: e.tag == "code")
-def code(elem: html.HtmlElement) -> str:
+def _(elem: html.HtmlElement) -> str:
     return elem.text_content().strip()
 
 
 @processor.route(lambda e: e.tag == "a")
-def a(elem: html.HtmlElement) -> str:
+def _(elem: html.HtmlElement) -> str:
     return elem.text_content().strip()
 
 
 @processor.route(lambda e: e.tag == "br")
-def br(_: html.HtmlElement) -> str:
+def _(_: html.HtmlElement) -> str:
     return "\n.br\n"
 
 
 @processor.route(lambda e: e.tag == "ol")
-def ordered_list(ol: html.HtmlElement) -> str:
+def _(ol: html.HtmlElement) -> str:
     lines: list[str] = list()
     lines.append(r".nr step 0 1")
     for item in ol:
@@ -101,7 +102,7 @@ def ordered_list(ol: html.HtmlElement) -> str:
 
 
 @processor.route(lambda e: e.tag == "ul")
-def unordered_list(ul: html.HtmlElement) -> str:
+def _(ul: html.HtmlElement) -> str:
     lines: list[str] = list()
     for item in ul:
         assert item.tag == "li", f"Unknown tag {item.tag} in unordered list"
@@ -112,7 +113,7 @@ def unordered_list(ul: html.HtmlElement) -> str:
 
 
 @processor.route(lambda e: e.tag == "div")
-def div(element: html.HtmlElement) -> str:
+def _(element: html.HtmlElement) -> str:
     if "t-member" in element.get("class", ""):
         for e in element.iter("h2"):
             e.drop_tree()
@@ -127,53 +128,18 @@ def div(element: html.HtmlElement) -> str:
         etree.strip_tags(element, "div")
         return collect(element, processor)
 
-    return div_block(element)
+    return div(element)
 
 
 @processor.route(lambda e: e.tag == "table")
-def table(elem: html.HtmlElement) -> str:
-    #     table_type = tree.get("class", None)
-    #     assert table_type is not None
-    #     table_type = table_type.split(" ")
-    #     etree.strip_tags(tree, "tbody")
-    #     if "t-dcl-begin" in table_type:
-    #         texts = [
-    #             '.SH "SYNOPSIS"',
-    #             ".TS",
-    #             "expand tab(;);",
-    #             f"{t_dcl_begin(tree)}",
-    #             ".TE",
-    #             ".sp",
-    #             '.SH "DESCRIPTION"',
-    #         ]
-    #         return "\n".join(texts)
-    #     if "t-dsc-begin" in table_type:
-    #         texts = (".TS", "box expand tab(;);", f"{t_dsc_begin(tree)}", ".TE")
-    #         return "\n".join(texts)
-    #     if "t-par-begin" in table_type:
-    #         texts = (".TS", "expand tab(;);", f"{t_par_begin(tree)}", ".TE", ".sp")
-    #         return "\n".join(texts)
-    #     if "t-rev-begin" in table_type:
-    #         texts = (".TS", "box expand tab(;);", f"{t_rev_begin(tree)}", ".TE")
-    #         return "\n".join(texts)
-    #     if "dsctable" in table_type:
-    #         texts = (".TS", "allbox expand tab(;);", f"{dsctable(tree)}", ".TE", ".sp")
-    #         return "\n".join(texts)
-    #     if "wikitable" in table_type:
-    #         texts = (".TS", "allbox expand tab(;);", f"{wikitable(tree)}", ".TE", ".sp")
-    #         return "\n".join(texts)
-    #     # if "mainpagetable" in table_type:
-    #     #     ...
-    #     return f".TS\nallbox expand tab(;);\n{default_table_parser(tree)}\n.TE\n.sp"
-    return ""
+def _(elem: html.HtmlElement) -> str:
+    return table(elem)
 
 
 def process(document: str, p: Processor[[], str] = processor) -> str:
-    # fmt: off
-    doc: html.HtmlElement = html.fromstring(document, parser=html.HTMLParser(encoding="utf-8"))
+    doc: html.HtmlElement = html.fromstring(document, parser=html.HTMLParser(encoding="utf-8"))  # fmt: off
     doc = doc.xpath("/html/body/div[@id='cpp-content-base']/div[@id='content']")[0]
-    body: html.HtmlElement = doc.xpath("div[@id='bodyContent']/div[@id='mw-content-text']")[0]
-    # fmt: on
+    body: html.HtmlElement = doc.xpath("div[@id='bodyContent']/div[@id='mw-content-text']")[0]  # fmt: off
     heading: html.HtmlElement = doc.xpath("h1")[0]
     texts: list[str] = list()
     heading_text = heading.text_content().strip()
@@ -227,6 +193,15 @@ def process(document: str, p: Processor[[], str] = processor) -> str:
     for element in body.cssselect("[style]"):
         if "display:none" in element.get("style", ""):
             element.drop_tree()
+
+    for element in body.xpath('.//table[contains(@class, "mw-collapsible") or contains(@class, "mw-collapsed")]'):  # fmt: off
+        span = html.Element("span")
+        span.text = "There should be a table, but it's too crowded."
+        parent = element.getparent()
+        if parent is not None:
+            index = parent.index(element)
+            parent.remove(element)
+            parent.insert(index, span)
 
     texts.append(collect(body, p))
 

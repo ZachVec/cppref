@@ -5,7 +5,7 @@ from cppref.core.cppreference.utils import collect
 from cppref.core.processor import Processor
 
 
-def description(desc: HtmlElement, processor: Processor[[], str]) -> str:
+def dl(desc: HtmlElement, processor: Processor[[], str]) -> str:
     p = processor.clone()
 
     level: int = 2
