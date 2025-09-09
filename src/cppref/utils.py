@@ -64,7 +64,7 @@ class Utils:
             await browser.close()
 
     @staticmethod
-    def html_handler(source: Source) -> Callable[[str], str]:
+    def html_handler(source: Source) -> Callable[[str, str], str]:
         if source == "cppreference":
             from cppref.core.cppreference import process
 

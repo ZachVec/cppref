@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 
 import asyncio
-from subprocess import Popen
 import sys
 from pathlib import Path
+from subprocess import Popen
 from typing import Optional
 
 from tqdm import tqdm
-from tqdm.asyncio import tqdm_asyncio as atqdm
 
 from cppref import Format, Record, Source
 from cppref.conf import ConfContext
@@ -60,7 +59,7 @@ class CppRef:
             else:
                 webpage = Utils.fetch(record, timeout)
 
-            Utils.write_file(filename, Utils.html_handler(source)(webpage))
+            Utils.write_file(filename, Utils.html_handler(source)(webpage, record.url))
 
         process = Popen(f"man {filename}", shell=True)
         process.wait()
@@ -76,11 +75,11 @@ class CppRef:
         if format == "man":
             _handler = Utils.html_handler(source)
 
-            def handler(resp: str) -> str:
-                return _handler(resp)
+            def handler(resp: str, r: Record) -> str:
+                return _handler(resp, r.url)
         else:
 
-            def handler(resp: str) -> str:
+            def handler(resp: str, r: Record) -> str:
                 return resp
 
         root = source_path.joinpath(format)
@@ -94,7 +93,7 @@ class CppRef:
                     print(f"Error={type(resp).__name__}({str(resp)}), record={records[index]}", file=sys.stderr)  # fmt: off
                     continue
                 try:
-                    resp = handler(resp)
+                    resp = handler(resp, records[index])
                 except AssertionError as e:
                     print(str(e), file=sys.stderr)
                     continue
@@ -153,13 +152,15 @@ class CppRef:
         for r in tqdm(records, desc="Processing", total=total, file=sys.stdout):
             document = Utils.read_file(html.joinpath(f"{r.id}.html"))
             try:
-                document = process(document)
+                document = process(document, r.url)
             except AssertionError as e:
                 print(f"{e}, record={r}", file=sys.stderr)
             except Exception as e:
                 print(f"record={r}, Unexpected error {e}", file=sys.stderr)
             else:
                 Utils.write_file(man3.joinpath(f"{r.id}.man"), document)
+            # document = process(document, r.url)
+            # Utils.write_file(man3.joinpath(f"{r.id}.man"), document)
 
 
 if __name__ == "__main__":

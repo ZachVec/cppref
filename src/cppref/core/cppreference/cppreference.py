@@ -136,7 +136,7 @@ def _(elem: html.HtmlElement) -> str:
     return table(elem)
 
 
-def process(document: str, p: Processor[[], str] = processor) -> str:
+def process(document: str, url: str, p: Processor[[], str] = processor) -> str:
     doc: html.HtmlElement = html.fromstring(document, parser=html.HTMLParser(encoding="utf-8"))  # fmt: off
     doc = doc.xpath("/html/body/div[@id='cpp-content-base']/div[@id='content']")[0]
     body: html.HtmlElement = doc.xpath("div[@id='bodyContent']/div[@id='mw-content-text']")[0]  # fmt: off
@@ -144,10 +144,10 @@ def process(document: str, p: Processor[[], str] = processor) -> str:
     texts: list[str] = list()
     heading_text = heading.text_content().strip()
     date = str(datetime.date.today())
-    source = "cppreference.com"
+    source = url
     slogan = "C++ Programmer\\'s Manual"
     texts.append(f'.TH "{heading_text}" 3 "{date}" "{source}" "{slogan}"')
-    texts.append(f'.SH "{heading_text}"')
+    texts.append('.SH "DEFINITION"')
 
     # remove the table of contents which does not make sense
     for element in body.xpath("//*[@id='toc']"):
