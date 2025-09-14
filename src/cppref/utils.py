@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import gzip
 import sqlite3
 from pathlib import Path
 from typing import Callable, Sequence
@@ -64,7 +65,7 @@ class Utils:
             await browser.close()
 
     @staticmethod
-    def html_handler(source: Source) -> Callable[[str, str], str]:
+    def html_handler(source: Source) -> Callable[[str, Record], str]:
         if source == "cppreference":
             from cppref.core.cppreference import process
 

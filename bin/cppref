@@ -55,7 +55,7 @@ class CppRef:
             else:
                 webpage = Utils.fetch(record, timeout)
 
-            Utils.write_file(filename, Utils.html_handler(source)(webpage, record.url))
+            Utils.write_file(filename, Utils.html_handler(source)(webpage, record))
 
         process = Popen(f"man {filename}", shell=True)
         process.wait()
@@ -77,7 +77,7 @@ class CppRef:
             return print("Nothing to fetch.", file=sys.stderr)
 
         # Process
-        async def _cache(records: list[Record]):
+        async def _fetch(records: list[Record]):
             index, total = -1, len(records)
             async for resp in Utils.afetch(*records, timeout=timeout, limit=limit):
                 index += 1
@@ -88,7 +88,7 @@ class CppRef:
                 print(f"{index}/{total}", file=sys.stdout)
 
         html.mkdir(parents=True, exist_ok=True)
-        asyncio.run(_cache(records))
+        asyncio.run(_fetch(records))
 
     def parse(self, force: bool = False, interact: bool = False):  # fmt: off
         source = ConfContext.read_source()
@@ -121,7 +121,7 @@ class CppRef:
         for r in tqdm(records, desc="Processing", total=total, file=sys.stdout):
             document = Utils.read_file(html.joinpath(f"{source}{r.id}.html"))
             try:
-                document = process(document, r.url)
+                document = process(document, r)
             except AssertionError as e:
                 print(f"{e}, record={r}", file=sys.stderr)
             except Exception as e:
