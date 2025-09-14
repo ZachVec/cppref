@@ -1,5 +1,5 @@
 import re
-from typing import Literal, NamedTuple, Required, TypedDict, Union
+from typing import Literal, NamedTuple, Union
 
 type Source = Literal["cppreference", "cplusplus"]
 
@@ -27,8 +27,3 @@ class Record(NamedTuple):
         result = re.search(r"^\s*(\d+).*", string)
         assert result is not None, "Nothing matched"
         return int(result.group(1))
-
-
-class Configuration(TypedDict):
-    source: Required[Source]
-    folder: Required[str]

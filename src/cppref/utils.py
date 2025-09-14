@@ -80,3 +80,8 @@ class Utils:
     def write_file(path: Path, content: str):
         with open(path, "w", encoding="utf-8") as file:
             file.write(content)
+
+    @staticmethod
+    def write_man3(path: Path, content: str):
+        with gzip.open(path, "w") as file:
+            file.write(content.encode("utf-8"))
