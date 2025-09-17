@@ -90,7 +90,7 @@ class CppRef:
         html.mkdir(parents=True, exist_ok=True)
         asyncio.run(_fetch(records))
 
-    def parse(self, force: bool = False, interact: bool = False):  # fmt: off
+    def parse(self, force: bool = False, interact: bool = False):
         source = ConfContext.read_source()
         html = ConfContext.html_root()
         man3 = ConfContext.man3_root()
