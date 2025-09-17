@@ -73,22 +73,21 @@ class CppRef:
             records = list(filter(lambda r: not html.joinpath(f"{source}{r.id}.html").exists(), records))  # fmt: off
             records = list(records)
         records = list(records)
-        if len(records) == 0:
+        if (length := len(records)) == 0:
             return print("Nothing to fetch.", file=sys.stderr)
 
-        # Process
-        async def _fetch(records: list[Record]):
-            index, total = -1, len(records)
-            async for resp in Utils.afetch(*records, timeout=timeout, limit=limit):
-                index += 1
-                if isinstance(resp, BaseException):
-                    print(f"Error={type(resp).__name__}({str(resp)}), record={records[index]}", file=sys.stderr)  # fmt: off
-                    continue
-                Utils.write_file(html.joinpath(f"{source}{records[index].id}.html"), resp)  # fmt: off
-                print(f"{index}/{total}", file=sys.stdout)
+        pbar = tqdm(total=length)
+
+        def on_success(record: Record, resp: str):
+            Utils.write_file(html.joinpath(f"{source}{record.id}.html"), resp)
+            pbar.update()
+
+        def on_failed(record: Record, exec: Exception):
+            print(f"Error={type(exec).__name__}({exec}): {record}", file=sys.stderr)
+            pbar.update()
 
         html.mkdir(parents=True, exist_ok=True)
-        asyncio.run(_fetch(records))
+        asyncio.run(Utils.afetch(*records, timeout=timeout, limit=limit, on_success=on_success, on_failed=on_failed))  # fmt: off
 
     def parse(self, force: bool = False, interact: bool = False):
         source = ConfContext.read_source()

@@ -3,10 +3,11 @@ from __future__ import annotations
 import asyncio
 import gzip
 import sqlite3
+from asyncio import Queue
 from pathlib import Path
-from typing import Callable, Sequence
+from typing import Callable
 
-from playwright.async_api import async_playwright
+from playwright.async_api import Page, async_playwright
 from playwright.sync_api import sync_playwright
 
 from cppref.typing_ import Record, Source
@@ -37,27 +38,59 @@ class Utils:
             return content
 
     @staticmethod
-    async def afetch(*records: Record, timeout: float, limit: int):
-        def batch_iter[T](data: Sequence[T]):
-            length = len(data)
-            for i in range(0, length, limit):
-                yield data[i : i + limit]
+    async def afetch(
+        *records: Record,
+        timeout: float,
+        limit: int,
+        on_success: Callable[[Record, str], None],
+        on_failed: Callable[[Record, Exception], None],
+    ):
+        _records = Queue[Record]()
+        for recrod in records:
+            _records.put_nowait(recrod)
+
+        _results = Queue[tuple[Record, Exception | str]]()
+
+        async def producer(page: Page):
+            while not _records.empty():
+                record = _records.get_nowait()
+                try:
+                    resp = await page.goto(record.url, timeout=timeout, wait_until="networkidle")  # fmt: off
+                    assert resp is not None, f"Timeout: {record}"
+                    assert resp.ok, f"Request failed: {record}, status={resp.status_text}"  # fmt: off
+                except Exception as e:
+                    _results.put_nowait((record, e))
+                else:
+                    _results.put_nowait((record, await page.content()))
+                finally:
+                    _records.task_done()
+
+        async def customer():
+            while True:
+                record, resp = await _results.get()
+                if isinstance(resp, str):
+                    try:
+                        on_success(record, resp)
+                    except Exception as e:
+                        on_failed(record, e)
+                else:
+                    on_failed(record, resp)
+                _results.task_done()
 
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
             pages = [await browser.new_page() for _ in range(limit)]
+            producers = [asyncio.create_task(producer(pages[i])) for i in range(limit)]
+            customers = [asyncio.create_task(customer()) for _ in range(limit)]
+            await _records.join()
+            for p in producers:
+                p.cancel()
+            await _results.join()
+            for c in customers:
+                c.cancel()
 
-            async def _fetch(index: int, record: Record) -> str:
-                resp = await pages[index].goto(record.url, timeout=timeout, wait_until="networkidle")  # fmt: off
-                assert resp is not None, f"Timeout: {record}"
-                assert resp.ok, f"Request failed: status={resp.status_text}, {record}"
-                return await pages[index].content()
-
-            for batch in batch_iter(records):
-                tasks = map(lambda t: _fetch(t[0], t[1]), enumerate(batch))
-                htmls = await asyncio.gather(*tasks, return_exceptions=True)
-                for html in htmls:
-                    yield html
+            await asyncio.gather(*producers, return_exceptions=True)
+            await asyncio.gather(*customers, return_exceptions=True)
 
             for page in pages:
                 await page.close()
