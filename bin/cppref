@@ -60,7 +60,7 @@ class CppRef:
         process = Popen(f"man {filename}", shell=True)
         process.wait()
 
-    def fetch(self, *, force: bool = False, timeout: float = 10000, limit: int = 30):
+    def fetch(self, *, force: bool = False, timeout: float = 10000, limit: int = 5):
         source = ConfContext.read_source()
         html = ConfContext.html_root()
 
