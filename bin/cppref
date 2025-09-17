@@ -128,6 +128,34 @@ class CppRef:
             else:
                 Utils.write_man3(man3.joinpath(f"{source}{r.id}.3.gz"), document)
 
+    def cache(self, force: bool = False, timeout: float = 10000, limit: int = 5):
+        source = ConfContext.read_source()
+        man3 = ConfContext.man3_root()
+        try:
+            records = Utils.query(source, ConfContext.dbfile())
+        except AssertionError as e:
+            return print(f"Unexpected Error: {e}", file=sys.stderr)
+        if not force:
+            records = list(filter(lambda r: not man3.joinpath(f"{source}{r.id}.3.gz").exists(), records))  # fmt: off
+            records = list(records)
+        records = list(records)
+        if (length := len(records)) == 0:
+            return print("Nothing to fetch.", file=sys.stderr)
+
+        pbar, process = tqdm(total=length), Utils.html_handler(source)
+
+        def on_success(record: Record, resp: str):
+            document = process(resp, record)
+            Utils.write_man3(man3.joinpath(f"{source}{record.id}.3.gz"), document)
+            pbar.update()
+
+        def on_failed(record: Record, exec: Exception):
+            print(f"Error={type(exec).__name__}({exec}): {record}", file=sys.stderr)
+            pbar.update()
+
+        man3.mkdir(parents=True, exist_ok=True)
+        asyncio.run(Utils.afetch(*records, timeout=timeout, limit=limit, on_success=on_success, on_failed=on_failed))  # fmt: off
+
 
 if __name__ == "__main__":
     import fire
