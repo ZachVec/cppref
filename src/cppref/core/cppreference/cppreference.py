@@ -3,12 +3,12 @@ import re
 
 from lxml import etree, html
 
-from cppref.typing_ import Record
 from cppref.core.cppreference.description import dl
 from cppref.core.cppreference.div import div
-from cppref.core.cppreference.utils import collect
 from cppref.core.cppreference.table import table
+from cppref.core.cppreference.utils import collect
 from cppref.core.processor import Processor
+from cppref.typing_ import Record
 
 processor: Processor[[], str] = Processor()
 
@@ -149,7 +149,7 @@ def process(document: str, record: Record, p: Processor[[], str] = processor) ->
     slogan = "C++ Programmer\\'s Manual"
     texts.append(f'.TH "{heading_text}" 3 "{date}" "{source}" "{slogan}"')
     texts.append('.SH "NAME"')
-    texts.append(rf'cppreference{record.id} \- {heading_text}')
+    texts.append(rf"cppreference{record.id} \- {heading_text}")
     texts.append('.SH "DEFINITION"')
 
     # remove the table of contents which does not make sense

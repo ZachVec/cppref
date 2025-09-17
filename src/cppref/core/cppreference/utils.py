@@ -2,7 +2,6 @@ from lxml.html import HtmlElement
 
 from cppref.core.processor import Processor
 
-
 # class Utils:
 #     @staticmethod
 #     def collect(element: HtmlElement, processor: Processor[[], str]):

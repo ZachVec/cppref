@@ -1,5 +1,3 @@
-from cppref.core.cppreference.cppreference import process
-from cppref.core.cppreference.cppreference import processor
-
+from cppref.core.cppreference.cppreference import process, processor
 
 __all__ = ["process", "processor"]

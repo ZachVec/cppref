@@ -1,4 +1,5 @@
 import re
+
 from lxml.html import HtmlElement
 
 from cppref.core.cppreference.utils import collect

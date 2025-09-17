@@ -3,9 +3,9 @@ from typing import override
 
 from lxml.html import HtmlElement
 
-from cppref.core.cppreference.table.width import table_width
 from cppref.core.cppreference.table.base import Table
 from cppref.core.cppreference.table.typing_ import RowSpec, RowText, TabInfo
+from cppref.core.cppreference.table.width import table_width
 from cppref.core.processor import Processor
 
 

@@ -1,9 +1,9 @@
 import re
+
 from lxml.etree import strip_tags
 from lxml.html import HtmlElement
 
 from cppref.core.processor import Processor
-
 
 processor = Processor[[], str]()
 
