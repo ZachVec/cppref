@@ -192,7 +192,7 @@ class CppRef:
         asyncio.run(Utils.afetch(*records, timeout=timeout, limit=limit, on_success=on_success, on_failed=on_failed))  # fmt: off
 
 
-if __name__ == "__main__":
+def main():
     import fire
 
     fire.Fire(CppRef, name="cppref")
