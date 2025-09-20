@@ -28,7 +28,7 @@ uv tool install cppref
 Downloading manual page database.
 
 ```bash
-dbdir="${XDG_DATA_HOME}:-$HOME/.local/share/cppref"
+dbdir="${XDG_DATA_HOME:-$HOME/.local/share}/cppref"
 mkdir -p "$dbdir"
 wget -O "$dbdir/index.db" https://github.com/ZachVec/cppref/releases/latest/download/index.db
 ```
