@@ -13,11 +13,21 @@ from cppref.utils import Utils
 
 
 class CppRef:
+    """A cli cpp manual pages for Linux/MacOS!"""
+
     def switch(self, source: Source):
+        """Switch the manual source.
+
+        Args:
+            source: data source.
+        """
+        if source != "cppreference":
+            return "Only cppreference is supported currently."
         with ConfContext() as conf:
             conf.source = source
 
     def list(self):
+        """List titles of current source."""
         source = ConfContext.read_source()
         try:
             records = Utils.query(source, ConfContext.dbfile())
@@ -28,6 +38,11 @@ class CppRef:
             pass  # the process piped to has been closed.
 
     def man(self, *, timeout: float = 10000):
+        """Lookup a manual page interactively.
+
+        Args:
+            timeout: timeout of requesting webpage.
+        """
         source = ConfContext.read_source()
         dbfile = ConfContext.dbfile()
         man3 = ConfContext.man3_root()
@@ -61,6 +76,13 @@ class CppRef:
         process.wait()
 
     def fetch(self, *, force: bool = False, timeout: float = 10000, limit: int = 5):
+        """Fetch web pages from source and save it to the cache.
+
+        Args:
+            force: whether or not overwrite the existing web pages
+            timeout: timeout of single url.
+            limit: number of concurrent requests
+        """
         source = ConfContext.read_source()
         html = ConfContext.html_root()
 
@@ -90,6 +112,12 @@ class CppRef:
         asyncio.run(Utils.afetch(*records, timeout=timeout, limit=limit, on_success=on_success, on_failed=on_failed))  # fmt: off
 
     def parse(self, force: bool = False, interact: bool = False):
+        """Parse the fetched pages in the cache, and save the results to manual directory.
+
+        Args:
+            force: whether or not overwrite the existing manual pages.
+            interact: select the manual pages to parse interactively.
+        """
         source = ConfContext.read_source()
         html = ConfContext.html_root()
         man3 = ConfContext.man3_root()
@@ -129,6 +157,13 @@ class CppRef:
                 Utils.write_man3(man3.joinpath(f"{source}{r.id}.3.gz"), document)
 
     def cache(self, force: bool = False, timeout: float = 10000, limit: int = 5):
+        """Basically the combination of fetch and parse, except for save the webpages to the cache.
+
+        Args:
+            force: whether or not overwrite the existing manual pages
+            timeout: timeout of single url
+            limit: number of concurrent requests
+        """
         source = ConfContext.read_source()
         man3 = ConfContext.man3_root()
         try:
