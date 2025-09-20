@@ -1,6 +1,6 @@
 [project]
 name = "cppref"
-version = "0.1.0"
+version = "0.1.1"
 description = "Refer to the cppreference with this cli!"
 readme = "README.md"
 requires-python = ">=3.13"
