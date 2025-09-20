@@ -19,8 +19,10 @@ A cli cpp manual pages for Linux/MacOS!
 
 ## 🚀 Getting Started
 
+Install by [uv](https://docs.astral.sh/uv/)
+
 ```bash
-uv tools install cppref
+uv tool install cppref
 ```
 
 Downloading manual page database.
