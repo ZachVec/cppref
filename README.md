@@ -1,37 +1,41 @@
 # cppref
 
-A cli pragram for cpp programmers to lookup cppreference!
+A cli cpp manual pages for Linux/MacOS!
 
-> [!Info]
-> This project is under development, pull requests are welcomed.
+![Demostration](https://github.com/user-attachments/assets/c543f02e-6695-4749-b0ac-566a1bf598b6)
 
-## Expected Features
+## ✨ Features
 
-- Syntax highlight support
-- Easy to integrate with fzf
-- Shipped with neovim plugin which can be integrated with fzf-lua.nvim
-- Cache pages on the fly or cache pages once and for all.
-- Import / export data files so that offline machines are able to access
+- 📁 XDG base directories support.
+- 🔎 Interactive lookup powered by [fzf](https://github.com/junegunn/fzf).
+- 💻 Properly rendered contents.
+- 💪 Async download for improved performance.
+- ⏳ Pretty progress bar for downloading.
 
-## Q&A
+## ⚡️ Requirements
 
-- Q: Why not `cppman`?
-- A: cppman use regex to format document, whereas this project format document
-by parsing html using xpath.
+- [fzf](https://github.com/junegunn/fzf) for interactive lookup.
+- [playwright](https://github.com/microsoft/playwright-python) chromium driver for subcommands `fetch` and `cache`, i.e., not offline mode.
 
-## Bugs
+## 🚀 Getting Started
 
-Please report bugs under the github issues section.
+```bash
+uv tools install cppref
+```
 
-## TODO
+Downloading manual page database.
 
-- [ ] parse html correctly
-  - [x] `<p>`: text
-  - [x] `<div>`: text
-  - [x] `<h3>`: section header
-  - [x] `<ol>` ordered list
-  - [x] `<ul>` unordered list
-  - [ ] `<table>` table
-  - [ ] more tags ...
-- [ ] Visit pages Syncly.
-- [ ] Cache pages Asyncly.
+```bash
+dbdir="${XDG_DATA_HOME}:-$HOME/.local/share/cppref"
+mkdir -p "$dbdir"
+wget -O "$dbdir/index.db" https://github.com/ZachVec/cppref/releases/latest/download/index.db
+```
+
+Downloading processed manual pages if cppref is going to be used in offline mode.
+
+```bash
+man3dir="${XDG_DATA_HOME:-$HOME/.local/share}/man/man3"
+mkdir -p "$man3dir"
+wget -O /tmp/man3_archive.tar.gz https://github.com/ZachVec/cppref/releases/latest/download/man3_archive.tar.gz
+tar xzf /tmp/man3_archive.tar.gz -C "$man3dir"
+```
